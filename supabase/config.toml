@@ -1,0 +1,13 @@
+[functions.stream-access]
+# The function checks the viewer JWT itself to support native app clients and
+# handle CORS preflight requests consistently.
+verify_jwt = false
+
+[functions.mpesa-checkout]
+verify_jwt = false
+
+[functions.mpesa-callback]
+verify_jwt = false
+
+[functions.register-stream-asset]
+verify_jwt = false
