@@ -1,14 +1,15 @@
 # StreamBoXx backend foundation
 
-The migration in `migrations/` is a starting schema for Supabase Auth, viewer profiles, the two-day trial, a rights-aware catalogue, private media storage, viewer lists/progress, and KES 50 daily-pass records.
+The migrations in `migrations/` extend the existing Supabase Auth, viewer profiles, rights-aware catalogue, private media storage, viewer lists/progress, and KES 50 daily-pass records. The 2026-09-26 extension adds catalogue sections/metadata, season and episode tables, licence dates/territories, and a phone-confirmed trial claim.
 
 ## Security design
 
 - A single owner is designated manually in `owner_control`; there is no first-visitor or self-service admin claim.
 - Viewer permissions are enforced by PostgreSQL grants and row-level security (RLS), not by hiding controls in the website.
-- New accounts receive a server-timestamped 48-hour trial. Viewers cannot edit their trial or payment records.
+- New accounts receive no trial until their Kenyan phone is verified through Supabase Auth. The database then assigns one server-timestamped 48-hour trial per verified phone number. Viewers cannot edit their phone claim, trial, or payment records. SMS phone authentication must be enabled and configured in Supabase; without a real SMS provider, phone verification and trials cannot start.
 - Paid access is derived only from a server-confirmed pass with a receipt and an active time window. A payment request or browser redirect must never grant access.
-- The public title table contains viewer-safe metadata only. Private rights evidence is kept in a separate owner-only table. Publishing requires a private content-rights reference, a cleared-rights timestamp, a ready streaming asset, and (when poster artwork is used) a separate artwork-rights reference. Database triggers reject publication when any requirement is missing and unpublish titles if rights or media are later withdrawn.
+- The public title table contains viewer-safe metadata only. Private rights evidence is kept in a separate owner-only table. Publishing requires explicit streaming permission, current licence dates, a private content-rights reference, a cleared-rights timestamp, a ready streaming asset, and (when poster artwork is used) a separate artwork-rights reference. The public catalogue view and signed-playback check exclude expired permissions; database triggers unpublish titles when rights are changed or revoked.
+- Feature films, series, shorts, and trailers have separate metadata values. African, Asian, and global categories, country, language, cast, director, duration, rating, trailer link, territory, and download permission can be recorded. Season and episode tables are owner-managed. The viewer app does not yet provide full season/episode management screens.
 - StreamBoXx production builds read only published title rows from Supabase. Fictional sample titles and the external test player are development-only and are excluded from the production bundle.
 - Playback requests go through the `stream-access` Edge Function. It validates the viewer's Supabase token, checks `has_streamboxx_access()`, requires a published title and ready asset, then issues an expiring provider token or signed object URL for each available authorized server (up to eight). Cloudflare Stream HLS uses one-hour signed tokens; Supabase Storage currently accepts only single-file MP4/M4V/WebM paths. Viewers can choose among available servers in the player. Never publish raw provider URLs.
 - Cloudflare Stream assets must have signed URLs required at the provider, and their database provider must be `cloudflare_stream`. Supabase Storage objects remain in the private `streamboxx-media` bucket with provider `supabase_storage`. A provider asset ID is a Cloudflare video ID or an object path inside that bucket.
@@ -33,6 +34,8 @@ The migration in `migrations/` is a starting schema for Supabase Auth, viewer pr
 5. Copy the project URL and publishable key into a local `.env` file as `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`. `.env` is ignored by Git. Do not use the service/secret key for either variable.
 6. Before production, apply and review the migration on a disposable local or staging project, check the RLS allow/deny behavior for owner, viewer, and signed-out roles, and inspect the storage policies. Do not push this starter migration into an existing database that has not been reviewed.
 
+For phone trials, enable phone sign-in/phone changes and configure an SMS provider in **Authentication → Providers → Phone**. Test code delivery and verification with a non-owner account. Keep SMS rate limits and abuse protection enabled. The UI reports the provider error when SMS is unavailable; it never marks a phone verified itself.
+
 ## Deploy playback and payment functions
 
 Deploy the migration before the functions. Install and authenticate the Supabase CLI, then deploy each function from the project folder:
@@ -54,6 +57,6 @@ For adaptive streaming, create a Cloudflare Stream account, enable **Require Sig
 
 ## Still required before subscriptions work
 
-The checkout adapters, callback verification, atomic pass provisioning, owner dashboard, media synchronization, and playback authorization are implemented in code, but the migration and functions have not been deployed or tested against real Supabase, Daraja, or media-provider accounts. The payment flow is not live until the owner configures and validates their own Safaricom PayBill and Daraja production credentials. Video uploads are currently performed by the owner in Cloudflare Stream; web-based direct uploads, email verification and account recovery, payment/webhook reconciliation, rate limiting, privacy/terms pages, data retention, and production operations also remain to be configured or completed.
+The checkout adapters, callback verification, atomic KES 50 pass provisioning, owner dashboard, media synchronization, and playback authorization are implemented in code, but the migration and functions have not been deployed or tested against real Supabase, Daraja, or media-provider accounts. The KES 50 checkout is not yet category-aware; KES 100 Asian and monthly plans are not implemented as purchasable entitlements. The payment flow is not live until the owner configures and validates the approved Safaricom merchant product and production credentials. Video uploads are currently performed by the owner in Cloudflare Stream; web-based direct uploads, payment/webhook reconciliation, pricing controls, account recovery, rate limiting, privacy/terms pages, data retention, and production operations also remain to be configured or completed.
 
 Never mark a pass paid from a client request. Never store or log full payment credentials or unnecessary personal data.

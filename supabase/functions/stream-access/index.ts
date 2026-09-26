@@ -62,7 +62,7 @@ Deno.serve(async (request) => {
       auth: { persistSession: false, autoRefreshToken: false },
     });
     const now = new Date().toISOString();
-    const { data: title, error: titleError } = await ownerClient.from('titles')
+    const { data: title, error: titleError } = await ownerClient.from('streamboxx_public_titles')
       .select('id').eq('id', titleId).not('published_at', 'is', null).lte('published_at', now).maybeSingle();
     if (titleError) return reply(503, { error: 'The catalogue could not be checked. Please try again.' }, origin);
     if (!title) return reply(404, { error: 'This title is not currently available.' }, origin);

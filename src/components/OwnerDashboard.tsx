@@ -5,14 +5,15 @@ type Viewer = {
   id: string;
   email: string | null;
   display_name: string | null;
-  trial_ends_at: string;
+  phone_number: string | null;
+  trial_ends_at: string | null;
   account_status: 'active' | 'suspended';
   created_at: string;
 };
 
 type Pass = { user_id: string; status: string; ends_at: string | null; starts_at: string | null; amount_kes: number; provider_checkout_id: string | null; provider_receipt: string | null; created_at: string; paid_at: string | null };
-type Title = { id: string; title: string; kind: 'film' | 'series'; artwork_path: string | null; published_at: string | null; created_at: string; content_origin: 'unverified' | 'streamboxx_original' | 'independent_creator' | 'public_domain' | 'licensed'; creation_method: 'human_created' | 'ai_assisted' | 'ai_generated' };
-type Rights = { title_id: string; rights_basis: string; rights_reference: string; artwork_rights_reference: string | null; rights_cleared_at: string | null };
+type Title = { id: string; title: string; kind: 'film' | 'series'; format: 'film' | 'series' | 'short' | 'trailer'; region: 'african' | 'asian' | 'global'; artwork_path: string | null; published_at: string | null; created_at: string; content_origin: 'unverified' | 'streamboxx_original' | 'independent_creator' | 'public_domain' | 'licensed'; creation_method: 'human_created' | 'ai_assisted' | 'ai_generated' };
+type Rights = { title_id: string; rights_basis: string; rights_reference: string; artwork_rights_reference: string | null; rights_cleared_at: string | null; licence_expiry?: string | null; streaming_permitted?: boolean };
 type MediaAsset = { id: string; title_id: string; provider: string; provider_asset_id: string; status: 'processing' | 'ready' | 'unavailable'; ready_at: string | null };
 
 export default function OwnerDashboard({ onClose }: { onClose: () => void }) {
@@ -35,23 +36,23 @@ export default function OwnerDashboard({ onClose }: { onClose: () => void }) {
     setError('');
     try {
       const [viewerResult, passResult, titleResult, rightsResult, mediaResult] = await Promise.all([
-        supabase.from('profiles').select('id,email,display_name,trial_ends_at,account_status,created_at').order('created_at', { ascending: false }).limit(500),
+        supabase.from('profiles').select('id,email,display_name,phone_number,trial_ends_at,account_status,created_at').order('created_at', { ascending: false }).limit(500),
         supabase.from('daily_passes').select('user_id,status,starts_at,ends_at,amount_kes,provider_checkout_id,provider_receipt,created_at,paid_at').order('created_at', { ascending: false }).limit(500),
         supabase.from('titles').select('id,title,kind,artwork_path,published_at,created_at').order('created_at', { ascending: false }).limit(500),
-        supabase.from('catalog_rights').select('title_id,rights_basis,rights_reference,artwork_rights_reference,rights_cleared_at').order('updated_at', { ascending: false }).limit(500),
+        supabase.from('catalog_rights').select('title_id,rights_basis,rights_reference,artwork_rights_reference,rights_cleared_at,licence_expiry,streaming_permitted').order('updated_at', { ascending: false }).limit(500),
         supabase.from('media_assets').select('id,title_id,provider,provider_asset_id,status,ready_at').order('created_at', { ascending: false }).limit(500),
       ]);
       const failure = viewerResult.error ?? passResult.error ?? titleResult.error ?? rightsResult.error ?? mediaResult.error;
       if (failure) throw failure;
       setViewers((viewerResult.data ?? []) as Viewer[]);
       setPasses((passResult.data ?? []) as Pass[]);
-      const baseTitles = (titleResult.data ?? []).map((row) => ({ ...row, content_origin: 'unverified' as const, creation_method: 'human_created' as const })) as Title[];
+      const baseTitles = (titleResult.data ?? []).map((row) => ({ ...row, format: row.kind === 'series' ? 'series' as const : 'film' as const, region: 'global' as const, content_origin: 'unverified' as const, creation_method: 'human_created' as const })) as Title[];
       if (baseTitles.length) {
-        const { data: origins, error: originsError } = await supabase.from('titles').select('id,content_origin,creation_method').in('id', baseTitles.map((title) => title.id));
+        const { data: origins, error: originsError } = await supabase.from('titles').select('id,content_origin,creation_method,format,region').in('id', baseTitles.map((title) => title.id));
         if (!originsError && origins) {
           for (const origin of origins) {
             const title = baseTitles.find((row) => row.id === origin.id);
-            if (title) { title.content_origin = origin.content_origin; title.creation_method = origin.creation_method; }
+            if (title) { title.content_origin = origin.content_origin; title.creation_method = origin.creation_method; title.format = origin.format; title.region = origin.region; }
           }
         }
       }
@@ -94,9 +95,11 @@ export default function OwnerDashboard({ onClose }: { onClose: () => void }) {
     const basis = String(form.get('rights_basis') ?? '');
     const rightsReference = String(form.get('rights_reference') ?? '').trim();
     const artworkPath = String(form.get('artwork_path') ?? '').trim();
+    const trailerUrl = String(form.get('trailer_url') ?? '').trim();
     const artworkRightsReference = String(form.get('artwork_rights_reference') ?? '').trim();
     const contentOrigin = String(form.get('content_origin') ?? 'unverified');
     const creationMethod = String(form.get('creation_method') ?? 'human_created');
+    const chosenFormat = String(form.get('format') ?? 'film');
     const cleared = form.get('rights_cleared') === 'on';
     const slug = title.toLocaleLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     if (!slug) {
@@ -105,6 +108,10 @@ export default function OwnerDashboard({ onClose }: { onClose: () => void }) {
     }
     if (artworkPath && !/^https:\/\//i.test(artworkPath)) {
       setError('Use a secure HTTPS poster image URL.');
+      return;
+    }
+    if (trailerUrl && !/^https:\/\//i.test(trailerUrl)) {
+      setError('Use a secure HTTPS link for the authorized trailer.');
       return;
     }
     if (cleared && (!basis || !rightsReference || (artworkPath && !artworkRightsReference))) {
@@ -118,14 +125,33 @@ export default function OwnerDashboard({ onClose }: { onClose: () => void }) {
       slug,
       title,
       synopsis: String(form.get('synopsis') ?? '').trim(),
-      kind: String(form.get('kind') ?? 'film'),
+      kind: chosenFormat === 'series' ? 'series' : 'film',
       release_year: Number(form.get('release_year')) || null,
       genre: String(form.get('genre') ?? 'Drama').trim(),
       artwork_path: artworkPath || null,
       published_at: null,
     };
-    let { data: newTitle, error: insertError } = await supabase.from('titles').insert({ ...titleDraft, content_origin: contentOrigin, creation_method: creationMethod }).select('id').single();
+    const extendedTitleDraft = {
+      ...titleDraft,
+      format: chosenFormat,
+      region: String(form.get('region') ?? 'global'),
+          country: String(form.get('country') ?? '').trim() || null,
+          language: String(form.get('language') ?? '').trim() || null,
+          director: String(form.get('director') ?? '').trim() || null,
+      age_rating: String(form.get('age_rating') ?? '').trim() || null,
+      cast_names: String(form.get('cast_names') ?? '').split(',').map((name) => name.trim()).filter(Boolean).slice(0, 40),
+      trailer_url: trailerUrl || null,
+      download_permitted: form.get('download_permitted') === 'on',
+      duration_seconds: Number(form.get('duration_minutes')) > 0 ? Number(form.get('duration_minutes')) * 60 : null,
+    };
+    let { data: newTitle, error: insertError } = await supabase.from('titles').insert({ ...extendedTitleDraft, content_origin: contentOrigin, creation_method: creationMethod }).select('id').single();
     let savedWithoutOriginFields = false;
+    if (insertError && /content_origin|creation_method|format|region|country|language|director|age_rating|duration_seconds|download_permitted|cast_names|trailer_url/i.test(insertError.message)) {
+      const originInsert = await supabase.from('titles').insert({ ...titleDraft, content_origin: contentOrigin, creation_method: creationMethod }).select('id').single();
+      newTitle = originInsert.data;
+      insertError = originInsert.error;
+      savedWithoutOriginFields = !originInsert.error;
+    }
     if (insertError && /content_origin|creation_method/i.test(insertError.message)) {
       const legacyInsert = await supabase.from('titles').insert(titleDraft).select('id').single();
       newTitle = legacyInsert.data;
@@ -144,6 +170,11 @@ export default function OwnerDashboard({ onClose }: { onClose: () => void }) {
           rights_reference: rightsReference,
           artwork_rights_reference: artworkRightsReference || null,
           rights_cleared_at: cleared ? new Date().toISOString() : null,
+          streaming_permitted: cleared && form.get('streaming_permitted') === 'on',
+          licence_start: String(form.get('licence_start') ?? '') || null,
+          licence_expiry: String(form.get('licence_expiry') ?? '') || null,
+          territory: String(form.get('territories') ?? 'global').split(',').map((value) => value.trim()).filter(Boolean),
+          contract_reference: String(form.get('contract_reference') ?? '').trim() || null,
           reviewed_by: (await supabase.auth.getUser()).data.user?.id ?? null,
         });
         if (rightsError) {
@@ -205,7 +236,7 @@ export default function OwnerDashboard({ onClose }: { onClose: () => void }) {
   }
 
   const now = Date.now();
-  const activeTrials = viewers.filter((viewer) => viewer.account_status === 'active' && Date.parse(viewer.trial_ends_at) > now).length;
+  const activeTrials = viewers.filter((viewer) => viewer.account_status === 'active' && viewer.trial_ends_at && Date.parse(viewer.trial_ends_at) > now).length;
   const activePassUsers = new Set(passes.filter((pass) => pass.status === 'paid' && pass.ends_at && Date.parse(pass.ends_at) > now).map((pass) => pass.user_id)).size;
 
   return (
@@ -226,7 +257,7 @@ export default function OwnerDashboard({ onClose }: { onClose: () => void }) {
       </div>
 
       <section className="owner-card"><div className="owner-card-heading"><div><p className="eyebrow">ACCOUNT ACCESS</p><h2>Viewers</h2></div></div>
-        {loading ? <p className="admin-muted">Loading viewer accounts…</p> : viewers.length === 0 ? <p className="admin-muted">No viewer accounts yet.</p> : <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Viewer</th><th>Joined</th><th>Trial ends</th><th>Access</th><th>Owner action</th></tr></thead><tbody>{viewers.map((viewer) => <tr key={viewer.id}><td><strong>{viewer.display_name || 'Viewer'}</strong><small>{viewer.email || viewer.id}</small></td><td>{new Date(viewer.created_at).toLocaleDateString()}</td><td>{new Date(viewer.trial_ends_at).toLocaleString()}</td><td><span className={`status-pill ${viewer.account_status}`}>{viewer.account_status}</span></td><td><button className="table-action" disabled={busyUser === viewer.id} onClick={() => void setSuspended(viewer)}>{busyUser === viewer.id ? 'Saving…' : viewer.account_status === 'active' ? 'Suspend' : 'Restore'}</button></td></tr>)}</tbody></table></div>}
+        {loading ? <p className="admin-muted">Loading viewer accounts…</p> : viewers.length === 0 ? <p className="admin-muted">No viewer accounts yet.</p> : <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Viewer</th><th>Phone verification</th><th>Joined</th><th>Trial status</th><th>Access</th><th>Owner action</th></tr></thead><tbody>{viewers.map((viewer) => <tr key={viewer.id}><td><strong>{viewer.display_name || 'Viewer'}</strong><small>{viewer.email || viewer.id}</small></td><td>{viewer.phone_number ? <><span className="status-pill published">Verified</span><small>{viewer.phone_number}</small></> : <span className="status-pill draft">Not verified</span>}</td><td>{new Date(viewer.created_at).toLocaleDateString()}</td><td>{viewer.trial_ends_at ? `Ends ${new Date(viewer.trial_ends_at).toLocaleString()}` : 'Not started'}</td><td><span className={`status-pill ${viewer.account_status}`}>{viewer.account_status}</span></td><td><button className="table-action" disabled={busyUser === viewer.id} onClick={() => void setSuspended(viewer)}>{busyUser === viewer.id ? 'Saving…' : viewer.account_status === 'active' ? 'Suspend' : 'Restore'}</button></td></tr>)}</tbody></table></div>}
       </section>
 
       <section className="owner-card"><div className="owner-card-heading"><div><p className="eyebrow">SUBSCRIPTIONS</p><h2>Daily passes and payment receipts</h2></div></div>
@@ -236,7 +267,17 @@ export default function OwnerDashboard({ onClose }: { onClose: () => void }) {
       <section className="owner-card"><div className="owner-card-heading"><div><p className="eyebrow">CATALOGUE RIGHTS</p><h2>Draft a title</h2></div></div>
         <form className="admin-title-form" onSubmit={addDraft}>
           <label>Title<input name="title" maxLength={180} required /></label>
-          <label>Type<select name="kind"><option value="film">Film</option><option value="series">Series</option></select></label>
+          <label>Catalogue section<select name="format"><option value="film">Feature film</option><option value="series">Series</option><option value="short">Short</option><option value="trailer">Trailer</option></select></label>
+          <label>Content category<select name="region"><option value="global">Global / unclassified</option><option value="african">African</option><option value="asian">Asian</option></select></label>
+          <label>Country<input name="country" maxLength={80} placeholder="Country of origin" /></label>
+          <label>Language<input name="language" maxLength={80} placeholder="Primary language" /></label>
+          <label>Duration in minutes<input name="duration_minutes" type="number" min="1" max="1000" /></label>
+          <label>Director<input name="director" maxLength={160} /></label>
+          <label>Age rating<input name="age_rating" maxLength={24} placeholder="e.g. PG" /></label>
+          <label>Cast<input name="cast_names" maxLength={1000} placeholder="Comma-separated names" /></label>
+          <label>Authorized trailer URL<input name="trailer_url" type="url" maxLength={500} placeholder="https://…" /></label>
+          <label>Licensed territories<input name="territories" maxLength={500} defaultValue="global" placeholder="e.g. Kenya, Uganda, Tanzania" /></label>
+          <label>Contract reference<input name="contract_reference" maxLength={500} placeholder="Private agreement reference" /></label>
           <label>Release year<input name="release_year" type="number" min="1888" max="2200" /></label>
           <label>Genre<input name="genre" maxLength={80} defaultValue="Drama" required /></label>
           <label className="admin-wide">Licensed poster image URL<input name="artwork_path" type="url" maxLength={500} placeholder="https://…" /></label>
@@ -245,8 +286,12 @@ export default function OwnerDashboard({ onClose }: { onClose: () => void }) {
           <label>How was it made?<select name="creation_method" required defaultValue="human_created"><option value="human_created">Human-created</option><option value="ai_assisted">AI-assisted</option><option value="ai_generated">AI-generated</option></select></label>
           <label>Rights basis<select name="rights_basis"><option value="">Not reviewed</option><option value="owned">Owned by StreamBoXx</option><option value="licensed">Licensed</option><option value="public_domain">Public domain</option></select></label>
           <label>Rights record reference<input name="rights_reference" maxLength={500} placeholder="Private contract or verification reference" /></label>
+          <label>License starts<input name="licence_start" type="date" /></label>
+          <label>License expires<input name="licence_expiry" type="date" /></label>
+          <label className="rights-confirm"><input name="download_permitted" type="checkbox" /> Contract explicitly allows downloads</label>
           <label className="admin-wide">Poster artwork rights record<input name="artwork_rights_reference" maxLength={500} placeholder="Separate private record for this poster image" /></label>
           <label className="rights-confirm admin-wide"><input name="rights_cleared" type="checkbox" /> I have verified the title and any poster image rights and have supporting records.</label>
+          <label className="rights-confirm admin-wide"><input name="streaming_permitted" type="checkbox" /> Rights specifically permit StreamBoXX to stream this title in the territories listed.</label>
           <div className="admin-wide"><button className="primary-button" disabled={savingTitle}>{savingTitle ? 'Saving…' : 'Save as private draft'}</button><p className="admin-muted">This does not publish or make a title streamable. Signed playback and media upload are separate stages.</p></div>
         </form>
       </section>
@@ -261,7 +306,7 @@ export default function OwnerDashboard({ onClose }: { onClose: () => void }) {
       </section>
 
       <section className="owner-card"><div className="owner-card-heading"><div><p className="eyebrow">CONTENT INVENTORY</p><h2>Titles and rights status</h2></div></div>
-        {loading ? <p className="admin-muted">Loading title records…</p> : titles.length === 0 ? <p className="admin-muted">No title drafts yet.</p> : <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Title</th><th>Content origin</th><th>Creation method</th><th>Rights basis</th><th>Title record</th><th>Poster record</th><th>Media</th><th>Availability</th><th>Action</th></tr></thead><tbody>{titles.map((title) => { const right = rightsRecords.find((record) => record.title_id === title.id); const media = mediaAssets.find((asset) => asset.title_id === title.id); const cleared = Boolean(right?.rights_cleared_at && right.rights_reference.trim() && (!title.artwork_path || right.artwork_rights_reference?.trim())); const canPublish = cleared && media?.status === 'ready' && !title.published_at; return <tr key={title.id}><td><strong>{title.title}</strong><small>{title.kind}</small></td><td>{title.content_origin.replaceAll('_', ' ')}</td><td>{title.creation_method.replaceAll('_', ' ')}</td><td>{right?.rights_basis || 'Not reviewed'}</td><td>{right?.rights_cleared_at ? new Date(right.rights_cleared_at).toLocaleDateString() : 'Needs review'}</td><td>{title.artwork_path ? (right?.artwork_rights_reference ? 'Recorded' : 'Needs review') : 'No poster'}</td><td>{media ? <><span className={`status-pill ${media.status === 'ready' ? 'published' : 'draft'}`}>{media.status}</span><small>{media.provider}</small></> : 'Not linked'}</td><td><span className={`status-pill ${title.published_at ? 'published' : 'draft'}`}>{title.published_at ? 'Published' : 'Private draft'}</span></td><td>{canPublish ? <button className="table-action" disabled={publishingTitle === title.id} onClick={() => void publishTitle(title)}>{publishingTitle === title.id ? 'Publishing…' : 'Publish'}</button> : title.published_at ? 'Live' : '—'}</td></tr>; })}</tbody></table></div>}
+        {loading ? <p className="admin-muted">Loading title records…</p> : titles.length === 0 ? <p className="admin-muted">No title drafts yet.</p> : <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Title</th><th>Format / region</th><th>Content origin</th><th>Rights basis</th><th>Rights / expiry</th><th>Poster record</th><th>Media</th><th>Availability</th><th>Action</th></tr></thead><tbody>{titles.map((title) => { const right = rightsRecords.find((record) => record.title_id === title.id); const media = mediaAssets.find((asset) => asset.title_id === title.id); const cleared = Boolean(right?.rights_cleared_at && right.rights_reference.trim() && (!title.artwork_path || right.artwork_rights_reference?.trim())); const canPublish = cleared && right?.streaming_permitted !== false && (!right?.licence_expiry || right.licence_expiry >= new Date().toISOString().slice(0, 10)) && media?.status === 'ready' && !title.published_at; const expiryLabel = right?.licence_expiry ? (right.licence_expiry < new Date().toISOString().slice(0, 10) ? `Expired ${right.licence_expiry}` : `Until ${right.licence_expiry}`) : 'No expiry entered'; return <tr key={title.id}><td><strong>{title.title}</strong><small>{title.kind}</small></td><td>{title.format} · {title.region}</td><td>{title.content_origin.replaceAll('_', ' ')}</td><td>{right?.rights_basis || 'Not reviewed'}</td><td>{right?.rights_cleared_at ? <>{new Date(right.rights_cleared_at).toLocaleDateString()}<small>{right.streaming_permitted === false ? 'Streaming not permitted' : expiryLabel}</small></> : 'Needs review'}</td><td>{title.artwork_path ? (right?.artwork_rights_reference ? 'Recorded' : 'Needs review') : 'No poster'}</td><td>{media ? <><span className={`status-pill ${media.status === 'ready' ? 'published' : 'draft'}`}>{media.status}</span><small>{media.provider}</small></> : 'Not linked'}</td><td><span className={`status-pill ${title.published_at ? 'published' : 'draft'}`}>{title.published_at ? 'Published' : 'Private draft'}</span></td><td>{canPublish ? <button className="table-action" disabled={publishingTitle === title.id} onClick={() => void publishTitle(title)}>{publishingTitle === title.id ? 'Publishing…' : 'Publish'}</button> : title.published_at ? 'Live' : '—'}</td></tr>; })}</tbody></table></div>}
       </section>
       <p className="owner-footnote">Payment access is granted only after server-side Daraja verification. Live checkout remains disabled until Safaricom approves the merchant setup and the Supabase payment secrets are configured.</p>
     </section>

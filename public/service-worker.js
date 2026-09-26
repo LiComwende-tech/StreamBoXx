@@ -1,4 +1,4 @@
-const CACHE_NAME = 'streamboxx-shell-v1';
+const CACHE_NAME = 'streamboxx-shell-v2';
 const APP_SHELL = [
   '/',
   '/index.html',
@@ -35,7 +35,10 @@ self.addEventListener('fetch', (event) => {
   if (['script', 'style', 'image', 'font'].includes(request.destination)) {
     event.respondWith(caches.match(request).then((cached) => {
       const fresh = fetch(request).then((response) => {
-        if (response.ok) event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone())));
+        const contentType = response.headers.get('content-type') ?? '';
+        if (response.ok && !contentType.toLowerCase().includes('text/html')) {
+          event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone())));
+        }
         return response;
       });
       return cached || fresh;

@@ -13,7 +13,7 @@ const publicCatalogOnly = import.meta.env.VITE_PUBLIC_CATALOG_ONLY === 'true';
 const ART_THEMES = ['blue', 'ember', 'current', 'orbit', 'paper', 'north', 'garden', 'rain', 'copper', 'wonders'];
 type LibraryMode = 'loading' | 'preview' | 'live' | 'open' | 'empty' | 'unconfigured' | 'error';
 
-type Page = 'Home' | 'Films' | 'Series' | 'Genres' | 'My List' | 'Continue Watching';
+type Page = 'Home' | 'Films' | 'Series' | 'African' | 'Asian' | 'Shorts' | 'Trailers' | 'Genres' | 'My List' | 'Continue Watching';
 
 function App() {
   const [page, setPage] = useState<Page>('Home');
@@ -29,7 +29,7 @@ function App() {
   const [catalogue, setCatalogue] = useState<CatalogTitle[]>([]);
   const [libraryMode, setLibraryMode] = useState<LibraryMode>('loading');
   const [viewer, setViewer] = useState<User | null>(null);
-  const [profile, setProfile] = useState<{ trial_ends_at: string; account_status: 'active' | 'suspended' } | null>(null);
+  const [profile, setProfile] = useState<{ trial_started_at: string | null; trial_ends_at: string | null; phone_number: string | null; account_status: 'active' | 'suspended' } | null>(null);
   const [savedIds, setSavedIds] = useState<string[]>(() => {
     try {
       const stored = localStorage.getItem('streamboxx-my-list');
@@ -62,10 +62,10 @@ function App() {
       return;
     }
     let active = true;
-    void supabase.from('profiles').select('trial_ends_at, account_status').eq('id', viewer.id).maybeSingle()
+    void supabase.from('profiles').select('trial_started_at,trial_ends_at,phone_number,account_status').eq('id', viewer.id).maybeSingle()
       .then(({ data }) => { if (active && data) setProfile(data); });
     return () => { active = false; };
-  }, [viewer?.id]);
+  }, [viewer?.id, viewer?.phone_confirmed_at]);
 
   useEffect(() => {
     if (!supabase || !viewer) {
@@ -85,7 +85,7 @@ function App() {
     const catalogClient = supabase;
     if (catalogClient) {
       setLibraryMode('loading');
-      void catalogClient.from('titles').select('id,title,synopsis,kind,release_year,genre,artwork_path').order('title')
+      void catalogClient.from('streamboxx_public_titles').select('id,title,synopsis,kind,release_year,genre,artwork_path,format,region,country').order('title')
         .then(async ({ data, error }) => {
           if (!active) return;
           if (error) {
@@ -111,6 +111,9 @@ function App() {
             artworkUrl: row.artwork_path || undefined,
             contentOrigin: originMap.get(row.id)?.content_origin ?? 'unverified',
             creationMethod: originMap.get(row.id)?.creation_method ?? 'human_created',
+            format: row.format ?? (row.kind === 'series' ? 'series' : 'film'),
+            region: row.region ?? 'global',
+            country: row.country ?? undefined,
             label: index === 0 ? 'FEATURED' : undefined,
           })), ...publicArchive]);
           setLibraryMode(rows.length ? 'live' : 'open');
@@ -148,7 +151,8 @@ function App() {
   const filtered = useMemo(() => {
     const term = query.trim().toLocaleLowerCase();
     return catalogue.filter((item) => {
-      const matchesPage = page === 'Films' ? item.kind === 'Film' : page === 'Series' ? item.kind === 'Series' : true;
+      const format = item.format ?? (item.kind === 'Series' ? 'series' : 'film');
+      const matchesPage = page === 'Films' ? format === 'film' : page === 'Series' ? format === 'series' : page === 'Shorts' ? format === 'short' : page === 'Trailers' ? format === 'trailer' : page === 'African' ? item.region === 'african' : page === 'Asian' ? item.region === 'asian' : true;
       const matchesGenre = genre === 'All' || item.genre === genre;
       const matchesSearch = !term || `${item.title} ${item.genre} ${item.detail}`.toLocaleLowerCase().includes(term);
       const matchesSaved = page !== 'My List' || savedIds.includes(item.id);
@@ -171,6 +175,10 @@ function App() {
     Home: { title: 'Your next story starts here.', subtitle: libraryMode === 'preview' ? 'Development preview titles, ready to explore.' : 'Explore films and series cleared for StreamBoXx.' },
     Films: { title: 'Films', subtitle: 'Stories made for one sitting.' },
     Series: { title: 'Series', subtitle: 'Find a new world to return to.' },
+    African: { title: 'African stories', subtitle: 'Films and series from across Africa, as rights-cleared titles are added.' },
+    Asian: { title: 'Asian stories', subtitle: 'Films and series from across Asia, as rights-cleared titles are added.' },
+    Shorts: { title: 'Shorts', subtitle: 'Short films and small stories, clearly separated from feature films.' },
+    Trailers: { title: 'Trailers', subtitle: 'Officially authorized previews for titles in the catalogue.' },
     Genres: { title: 'Explore by mood', subtitle: 'Choose a genre and see where it takes you.' },
     'My List': { title: 'Your list', subtitle: 'A home for the titles you want to remember.' },
     'Continue Watching': { title: 'Pick up where you left off', subtitle: 'Your recent viewing will appear here once playback is added.' },
@@ -206,9 +214,10 @@ function App() {
               <span className="hero-index">01 <i /> 04</span>
             </section>
             <div className="content-section home-rows">
-              <ContentRow title="A little bit of everything" hint="FEATURED COLLECTION" items={catalogue.slice(1, 7)} onSelect={setSelected} />
-              <ContentRow title="Films for tonight" hint="FILMS" items={catalogue.filter((item) => item.kind === 'Film')} onSelect={setSelected} />
-              <ContentRow title="Stories in episodes" hint="SERIES" items={catalogue.filter((item) => item.kind === 'Series')} onSelect={setSelected} />
+              {catalogue.some((item) => item.format === 'film' || (!item.format && item.kind === 'Film')) && <ContentRow title="Feature films" hint="FILMS" items={catalogue.filter((item) => (item.format ?? (item.kind === 'Series' ? 'series' : 'film')) === 'film')} onSelect={setSelected} />}
+              {catalogue.some((item) => (item.format ?? (item.kind === 'Series' ? 'series' : 'film')) === 'series') && <ContentRow title="Stories in episodes" hint="SERIES" items={catalogue.filter((item) => (item.format ?? (item.kind === 'Series' ? 'series' : 'film')) === 'series')} onSelect={setSelected} />}
+              {catalogue.some((item) => item.format === 'short') && <ContentRow title="Short films" hint="SHORTS" items={catalogue.filter((item) => item.format === 'short')} onSelect={setSelected} />}
+              {catalogue.some((item) => item.format === 'trailer') && <ContentRow title="Previews" hint="TRAILERS" items={catalogue.filter((item) => item.format === 'trailer')} onSelect={setSelected} />}
             </div>
           </>
         ) : (
@@ -239,7 +248,7 @@ function App() {
         <section className="detail-dialog" role="dialog" aria-modal="true" aria-labelledby="detail-title">
           <button className="dialog-close" onClick={() => setSelected(null)} aria-label="Close details">×</button>
           <div className={`dialog-art art-${selected.art} ${selected.artworkUrl ? 'has-artwork' : ''}`}>{selected.artworkUrl ? <img className="poster-image" src={selected.artworkUrl} alt={`${selected.title} cover artwork`} /> : <><span className="poster-orb" /><span className="poster-title">{selected.title}</span></>}</div>
-          <div className="dialog-copy"><p className="eyebrow">{selected.kind.toUpperCase()} <span>·</span> {selected.year} <span>·</span> {selected.genre.toUpperCase()}</p><h2 id="detail-title">{selected.title}</h2><p>{selected.detail}</p><div className="detail-actions">{(selected.publicEmbedUrl || selected.publicPlaybackUrl || libraryMode === 'live') && <button className="primary-button" onClick={() => requestPlayback(selected)}>{selected.publicWatchLabel ?? (selected.publicPlaybackUrl || selected.publicEmbedUrl ? '▶ Watch now' : viewer ? '▶ Watch now' : 'Sign in to watch')}</button>}<button className="primary-button" onClick={() => toggleSaved(selected)}>{savedIds.includes(selected.id) ? '✓ Added to My List' : '＋ Add to My List'}</button><div className="demo-notice">{selected.publicWatchNote ?? (selected.publicPlaybackUrl || selected.publicEmbedUrl ? 'Watch in the StreamBoXX player.' : 'Playback checks your trial or day pass before opening a private stream.')}</div>{selected.publicSourceUrl && <details className="artwork-attribution"><summary>Credits and source details</summary><p>View the source and the applicable rights information for this title: <a href={selected.publicSourceUrl} target="_blank" rel="noreferrer">Open source details</a>.</p>{['openmovie-big-buck-bunny-2008','openmovie-tears-of-steel-2012','openmovie-sintel-2010'].includes(selected.id) && <p>Poster art: © Blender Foundation, used under <a href="https://creativecommons.org/licenses/by/3.0/" target="_blank" rel="noreferrer">Creative Commons Attribution 3.0</a>. Sources: <a href="https://commons.wikimedia.org/wiki/File:Big_buck_bunny_poster_big.jpg" target="_blank" rel="noreferrer">Big Buck Bunny</a>, <a href="https://commons.wikimedia.org/wiki/File:Tos-poster.png" target="_blank" rel="noreferrer">Tears of Steel</a>, and <a href="https://commons.wikimedia.org/wiki/File:Sintel_poster.jpg" target="_blank" rel="noreferrer">Sintel</a>.</p>}</details>}</div></div>
+          <div className="dialog-copy"><p className="eyebrow">{(selected.format === 'short' ? 'SHORT FILM' : selected.format === 'trailer' ? 'TRAILER' : selected.kind).toUpperCase()} <span>·</span> {selected.year} <span>·</span> {selected.genre.toUpperCase()}</p><h2 id="detail-title">{selected.title}</h2><p>{selected.detail}</p><div className="detail-actions">{(selected.publicEmbedUrl || selected.publicPlaybackUrl || libraryMode === 'live') && <button className="primary-button" onClick={() => requestPlayback(selected)}>{selected.publicWatchLabel ?? (selected.publicPlaybackUrl || selected.publicEmbedUrl ? '▶ Watch now' : viewer ? '▶ Watch now' : 'Sign in to watch')}</button>}<button className="primary-button" onClick={() => toggleSaved(selected)}>{savedIds.includes(selected.id) ? '✓ Added to My List' : '＋ Add to My List'}</button><div className="demo-notice">{selected.publicWatchNote ?? (selected.publicPlaybackUrl || selected.publicEmbedUrl ? 'Watch in the StreamBoXX player.' : 'Playback checks your trial or day pass before opening a private stream.')}</div>{selected.publicSourceUrl && <details className="artwork-attribution"><summary>Credits and source details</summary><p>View the source and the applicable rights information for this title: <a href={selected.publicSourceUrl} target="_blank" rel="noreferrer">Open source details</a>.</p>{['openmovie-big-buck-bunny-2008','openmovie-tears-of-steel-2012','openmovie-sintel-2010'].includes(selected.id) && <p>Poster art: © Blender Foundation, used under <a href="https://creativecommons.org/licenses/by/3.0/" target="_blank" rel="noreferrer">Creative Commons Attribution 3.0</a>. Sources: <a href="https://commons.wikimedia.org/wiki/File:Big_buck_bunny_poster_big.jpg" target="_blank" rel="noreferrer">Big Buck Bunny</a>, <a href="https://commons.wikimedia.org/wiki/File:Tos-poster.png" target="_blank" rel="noreferrer">Tears of Steel</a>, and <a href="https://commons.wikimedia.org/wiki/File:Sintel_poster.jpg" target="_blank" rel="noreferrer">Sintel</a>.</p>}</details>}</div></div>
         </section>
       </div>}
       {playbackTitle && <StreamPlayer titleId={playbackTitle.id} title={playbackTitle.title} publicPlaybackUrl={playbackTitle.publicPlaybackUrl} publicEmbedUrl={playbackTitle.publicEmbedUrl} publicSourceUrl={playbackTitle.publicSourceUrl} onClose={() => setPlaybackTitle(null)} />}

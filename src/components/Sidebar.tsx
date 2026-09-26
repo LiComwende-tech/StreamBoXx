@@ -1,9 +1,13 @@
-type Page = 'Home' | 'Films' | 'Series' | 'Genres' | 'My List' | 'Continue Watching';
+type Page = 'Home' | 'Films' | 'Series' | 'African' | 'Asian' | 'Shorts' | 'Trailers' | 'Genres' | 'My List' | 'Continue Watching';
 
 const links: { page: Page; icon: string }[] = [
   { page: 'Home', icon: '⌂' },
   { page: 'Films', icon: '▣' },
   { page: 'Series', icon: '▤' },
+  { page: 'African', icon: '◉' },
+  { page: 'Asian', icon: '◍' },
+  { page: 'Shorts', icon: '▷' },
+  { page: 'Trailers', icon: '▹' },
   { page: 'Genres', icon: '◈' },
   { page: 'My List', icon: '♡' },
   { page: 'Continue Watching', icon: '◷' },

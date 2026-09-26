@@ -3,8 +3,16 @@ import type { User } from '@supabase/supabase-js';
 import { supabase, supabaseConfigured } from '../lib/supabase';
 
 const checkoutEnabled = import.meta.env.VITE_ENABLE_CHECKOUT === 'true';
+const phoneTrialsEnabled = import.meta.env.VITE_ENABLE_PHONE_TRIALS === 'true';
 
-type Profile = { trial_ends_at: string; account_status: 'active' | 'suspended' };
+type Profile = { trial_started_at: string | null; trial_ends_at: string | null; phone_number: string | null; account_status: 'active' | 'suspended' };
+
+function toKenyanE164(value: string) {
+  const digits = value.trim().replace(/[\s()-]/g, '').replace(/^\+/, '');
+  if (/^0[17]\d{8}$/.test(digits)) return `+254${digits.slice(1)}`;
+  if (/^254[17]\d{8}$/.test(digits)) return `+${digits}`;
+  return null;
+}
 
 export default function AccountDialog({ user, profile, isOwner, onClose, onOpenAdmin }: { user: User | null; profile: Profile | null; isOwner: boolean; onClose: () => void; onOpenAdmin: () => void }) {
   const [mode, setMode] = useState<'signin' | 'signup'>('signup');
@@ -12,9 +20,14 @@ export default function AccountDialog({ user, profile, isOwner, onClose, onOpenA
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [phone, setPhone] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
   const [passEndsAt, setPassEndsAt] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setPhone(user?.phone ?? profile?.phone_number ?? (typeof user?.user_metadata?.phone_number === 'string' ? user.user_metadata.phone_number : ''));
+  }, [user?.id, user?.phone, profile?.phone_number]);
 
   useEffect(() => {
     if (!supabase || !user) { setPassEndsAt(null); return; }
@@ -64,6 +77,30 @@ export default function AccountDialog({ user, profile, isOwner, onClose, onOpenA
     }
   }
 
+  async function sendPhoneCode() {
+    if (!supabase || !user) return;
+    const e164 = toKenyanE164(phone);
+    if (!e164) { setNotice('Enter a Kenyan mobile number, such as 0712345678.'); return; }
+    setBusy(true);
+    setNotice('');
+    const { error } = await supabase.auth.updateUser({ phone: e164 });
+    setBusy(false);
+    if (error) setNotice(error.message);
+    else setNotice(`We sent a verification code to ${e164}. Enter it below to start your 48-hour trial.`);
+  }
+
+  async function verifyPhone() {
+    if (!supabase || !user) return;
+    const e164 = toKenyanE164(phone);
+    if (!e164 || !/^\d{6}$/.test(verificationCode.trim())) { setNotice('Enter the six-digit code sent to your Kenyan number.'); return; }
+    setBusy(true);
+    setNotice('');
+    const { error } = await supabase.auth.verifyOtp({ phone: e164, token: verificationCode.trim(), type: 'phone_change' });
+    setBusy(false);
+    if (error) setNotice(error.message);
+    else { setVerificationCode(''); setNotice('Phone verified. Your 48-hour free trial is now active.'); }
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!supabase) return;
@@ -80,7 +117,7 @@ export default function AccountDialog({ user, profile, isOwner, onClose, onOpenA
           },
         });
         if (error) throw error;
-        setNotice(data.session ? 'Your account is ready. Your 48-hour trial has started.' : 'Check your email to confirm your account. The 48-hour trial starts when the account is created.');
+        setNotice(data.session ? 'Your account is ready. Phone verification and the free trial will be available after SMS setup.' : 'Check your email to confirm your account, then sign in. Phone verification and the free trial will be available after SMS setup.');
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
         if (error) throw error;
@@ -115,21 +152,22 @@ export default function AccountDialog({ user, profile, isOwner, onClose, onOpenA
           <div className="account-signed-in">
             <p className="account-email">{user.email}</p>
             {isOwner ? <p className="account-owner-note">Owner account · you don’t need a viewer day pass.</p> : <>
-              {profile ? <p>{profile.account_status === 'suspended' ? 'This account is suspended. Contact the StreamBoXx owner for help.' : `Your free trial ends ${new Date(profile.trial_ends_at).toLocaleString()}.`}</p> : <p>Loading your trial details…</p>}
+              {profile ? <p>{profile.account_status === 'suspended' ? 'This account is suspended. Contact the StreamBoXx owner for help.' : profile.trial_ends_at ? `Your 48-hour trial ends ${new Date(profile.trial_ends_at).toLocaleString()}.` : phoneTrialsEnabled ? 'Verify your phone number to claim your one-time 48-hour free trial.' : 'Your account is ready. Phone verification and the free trial will be added later.'}</p> : <p>Loading your trial details…</p>}
+              {user.phone_confirmed_at ? <p className="account-owner-note">Verified phone: {user.phone ?? profile?.phone_number ?? 'confirmed'}</p> : phoneTrialsEnabled && <div className="account-checkout"><label htmlFor="trial-phone">Verify Kenyan phone for your free trial</label><input id="trial-phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="0712345678" value={phone} onChange={(event) => setPhone(event.target.value)} /><button className="account-secondary" disabled={busy || !phone.trim()} onClick={() => void sendPhoneCode()}>{busy ? 'Please wait…' : 'Send verification code'}</button><label htmlFor="phone-code">6-digit SMS code</label><input id="phone-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={verificationCode} onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, ''))} /><button className="primary-button" disabled={busy || verificationCode.length !== 6} onClick={() => void verifyPhone()}>{busy ? 'Verifying…' : 'Verify phone and start trial'}</button><p>One free trial per verified phone number. Your trial begins after verification. SMS delivery must be enabled for this project in Supabase.</p></div>}
               {passEndsAt && <p>Your paid day pass is active until {new Date(passEndsAt).toLocaleString()}.</p>}
-              {checkoutEnabled ? <div className="account-checkout"><label htmlFor="mpesa-phone">Kenyan M-Pesa number</label><input id="mpesa-phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="0712345678" value={phone} onChange={(event) => setPhone(event.target.value)} /><button className="primary-button" disabled={busy || !phone.trim()} onClick={() => void buyDayPass()}>{busy ? 'Waiting for M-Pesa…' : 'Get 1 day · KES 50'}</button><p>Approve the payment prompt on your phone. Access starts after M-Pesa confirms payment.</p></div> : <div className="account-checkout-status" role="status"><strong>Day-pass payments are being set up.</strong><p>Your account and free trial are available. Paid checkout will appear here after StreamBoXX’s payment service is ready.</p></div>}
+              {checkoutEnabled ? <div className="account-checkout"><label htmlFor="mpesa-phone">Kenyan M-Pesa number</label><input id="mpesa-phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="0712345678" value={phone} onChange={(event) => setPhone(event.target.value)} /><button className="primary-button" disabled={busy || !phone.trim()} onClick={() => void buyDayPass()}>{busy ? 'Waiting for M-Pesa…' : 'Get 1 day · KES 50'}</button><p>Approve the payment prompt on your phone. Access starts after M-Pesa confirms payment.</p></div> : <div className="account-checkout-status" role="status"><strong>Payments are not available yet.</strong><p>Your account is ready. Paid access will appear here after the M-Pesa service is approved and configured.</p></div>}
             </>}
             {isOwner && <button className="account-secondary" onClick={onOpenAdmin}>Open owner dashboard</button>}
             <button className="account-secondary" disabled={busy} onClick={signOut}>{busy ? 'Signing out…' : 'Sign out'}</button>
           </div>
         ) : (
           <>
-            <p className="account-intro">Create an account for your two-day free trial, or sign in to continue.</p>
+            <p className="account-intro">Create a StreamBoXx account with your email. Phone verification and the free trial will be available after SMS setup.</p>
             <form className="account-form" onSubmit={submit}>
               {mode === 'signup' && <label>Your name<input autoComplete="name" maxLength={80} value={displayName} onChange={(event) => setDisplayName(event.target.value)} required /></label>}
               <label>Email<input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
               <label>Password<input type="password" autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} required /></label>
-              <button className="primary-button" disabled={busy}>{busy ? 'Please wait…' : mode === 'signup' ? 'Create account · 2 days free' : 'Sign in'}</button>
+              <button className="primary-button" disabled={busy}>{busy ? 'Please wait…' : mode === 'signup' ? 'Create account' : 'Sign in'}</button>
             </form>
             <button className="account-mode-toggle" onClick={() => { setMode(mode === 'signup' ? 'signin' : 'signup'); setNotice(''); }}>{mode === 'signup' ? 'Already have an account? Sign in' : 'New to StreamBoXx? Create an account'}</button>
           </>

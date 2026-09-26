@@ -2,6 +2,9 @@ export type CatalogTitle = {
   id: string;
   title: string;
   kind: 'Film' | 'Series';
+  format?: 'film' | 'series' | 'short' | 'trailer';
+  region?: 'african' | 'asian' | 'global';
+  country?: string;
   year: number;
   genre: string;
   detail: string;
@@ -23,6 +26,7 @@ export type CatalogTitle = {
 export const publicArchive: CatalogTitle[] = [
   {
     id: 'openmovie-big-buck-bunny-2008', title: 'Big Buck Bunny', kind: 'Film', year: 2008,
+    format: 'short', region: 'global',
     genre: 'Animation · Comedy',
     detail: 'A quick-witted rabbit turns the tables on a trio of woodland bullies in this playful animated short.',
     art: 'current', contentOrigin: 'independent_creator', creationMethod: 'human_created',
@@ -34,6 +38,7 @@ export const publicArchive: CatalogTitle[] = [
   },
   {
     id: 'openmovie-tears-of-steel-2012', title: 'Tears of Steel', kind: 'Film', year: 2012,
+    format: 'short', region: 'global',
     genre: 'Science fiction · Action',
     detail: 'In a ruined Amsterdam, a team of scientists and warriors make one last attempt to stop a machine uprising.',
     art: 'blue', contentOrigin: 'independent_creator', creationMethod: 'human_created',
@@ -45,6 +50,7 @@ export const publicArchive: CatalogTitle[] = [
   },
   {
     id: 'sesame-street-official-episodes', title: 'Sesame Street', kind: 'Series', year: 1969,
+    format: 'series', region: 'global',
     genre: 'Family · Education',
     detail: 'Songs, stories, and playful learning unfold in a lively neighbourhood where everyone has something to share.',
     art: 'wonders',
@@ -56,6 +62,7 @@ export const publicArchive: CatalogTitle[] = [
   },
   {
     id: 'openmovie-sintel-2010', title: 'Sintel', kind: 'Film', year: 2010,
+    format: 'short', region: 'global',
     genre: 'Animation · Fantasy',
     detail: 'A young woman crosses a dangerous landscape to find the dragon she raised as a child.',
     art: 'ember', contentOrigin: 'independent_creator', creationMethod: 'human_created',
@@ -67,6 +74,7 @@ export const publicArchive: CatalogTitle[] = [
   },
   {
     id: 'archive-magician-1900', title: 'The Magician', kind: 'Film', year: 1900,
+  format: 'short', region: 'global',
   genre: 'Fantasy · Silent film',
   detail: 'A stage magician makes objects appear, disappear, and change in this playful early short.',
   art: 'orbit', contentOrigin: 'public_domain', creationMethod: 'human_created',
@@ -77,6 +85,7 @@ export const publicArchive: CatalogTitle[] = [
 },
   {
     id: 'openmovie-spring-2019', title: 'Spring', kind: 'Film', year: 2019,
+    format: 'short', region: 'global',
     genre: 'Fantasy · Adventure', detail: 'A shepherd girl and her dog face ancient spirits to continue the cycle of life.',
     art: 'garden', contentOrigin: 'independent_creator', creationMethod: 'human_created',
     artworkUrl: 'https://i.ytimg.com/vi/WhWc3b3KhnY/hqdefault.jpg',
@@ -86,6 +95,7 @@ export const publicArchive: CatalogTitle[] = [
   },
   {
     id: 'openmovie-coffee-run-2020', title: 'Coffee Run', kind: 'Film', year: 2020,
+    format: 'short', region: 'global',
     genre: 'Drama · Animation', detail: 'A young woman’s run for coffee brings memories of a relationship rushing back.',
     art: 'copper', contentOrigin: 'independent_creator', creationMethod: 'human_created',
     artworkUrl: 'https://i.ytimg.com/vi/PVGeM4OdABA/hqdefault.jpg',
@@ -95,6 +105,7 @@ export const publicArchive: CatalogTitle[] = [
   },
   {
     id: 'openmovie-charge-2022', title: 'Charge', kind: 'Film', year: 2022,
+    format: 'short', region: 'global',
     genre: 'Science fiction · Action', detail: 'An old man breaks into a battery factory and faces its deadly security robot.',
     art: 'ember', contentOrigin: 'independent_creator', creationMethod: 'human_created',
     artworkUrl: 'https://i.ytimg.com/vi/UXqq0ZvbOnk/hqdefault.jpg',
@@ -104,6 +115,7 @@ export const publicArchive: CatalogTitle[] = [
   },
   {
     id: 'openmovie-sprite-fright-2021', title: 'Sprite Fright', kind: 'Film', year: 2021,
+    format: 'short', region: 'global',
     genre: 'Comedy · Horror', detail: 'A group of teenagers in an isolated forest discover mushroom creatures with a surprising side.',
     art: 'wonders', contentOrigin: 'independent_creator', creationMethod: 'human_created',
     artworkUrl: 'https://i.ytimg.com/vi/_cMXraX_5RE/hqdefault.jpg',
@@ -113,6 +125,7 @@ export const publicArchive: CatalogTitle[] = [
   },
   {
     id: 'openmovie-wing-it-2023', title: 'Wing It!', kind: 'Film', year: 2023,
+    format: 'short', region: 'global',
     genre: 'Comedy · Animation', detail: 'An unexpected visitor launches an uptight engineer into an out-of-control space shuttle.',
     art: 'current', contentOrigin: 'independent_creator', creationMethod: 'human_created',
     artworkUrl: 'https://i.ytimg.com/vi/u9lj-c29dxI/hqdefault.jpg',
@@ -122,6 +135,7 @@ export const publicArchive: CatalogTitle[] = [
   },
   {
     id: 'openmovie-caminandes-llamigos-2016', title: 'Caminandes: Llamigos', kind: 'Film', year: 2016,
+    format: 'short', region: 'global',
     genre: 'Animation · Comedy', detail: 'In winter Patagonia, a llama and a penguin clash over the last tasty berry.',
     art: 'north', contentOrigin: 'independent_creator', creationMethod: 'human_created',
     artworkUrl: 'https://i.ytimg.com/vi/SkVqJ1SGeL0/hqdefault.jpg',

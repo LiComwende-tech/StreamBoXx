@@ -7,13 +7,14 @@ This project can be deployed as a static website, but it is not ready to accept 
 - Create a Git repository in an account you control and put this project there. Do not commit `.env`, payment credentials, service-role keys, or private rights documents.
 - Create a Supabase project in your own account. Record its project URL and publishable key; use only those two values in the website build.
 - Create and verify your owner account, apply the SQL migration, and set its UUID in `owner_control` using the owner bootstrap instructions in [`supabase/README.md`](supabase/README.md).
-- Register for a Safaricom Daraja account and a PayBill owned by you. Begin with sandbox credentials. Production payments require Safaricom approval and the production credentials issued for your account.
+- Register for the Safaricom merchant product it approves for your use (PayBill or Buy Goods). Begin with sandbox credentials. Production payments require approval and credentials issued for your merchant account.
 - Create a Cloudflare Stream account controlled by you. Enable **Require Signed URLs** on every asset. Upload only content you have distribution rights to.
 - Create a Cloudflare Pages project connected to your repository. Configure the build command as `pnpm run build` (or `npm run build`) and the output directory as `dist`. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` in both preview and production environments. Keep `VITE_ENABLE_CHECKOUT=false` until the Safaricom product is approved, matching backend checkout is deployed, and payment tests pass. A successful first deploy is a preview only until the backend and release gates below pass.
 
 ## 2. Connect and secure Supabase
 
 1. Use the Supabase CLI to link the project, inspect the migration on a disposable project first, and apply it to the production project only after review.
+   Apply every file in `supabase/migrations` in filename order, including the catalogue/rights extension.
 2. Deploy `stream-access`, `mpesa-checkout`, `mpesa-callback`, and `register-stream-asset` from this folder.
 3. Configure the function secrets listed in [`supabase/README.md`](supabase/README.md). Set `STREAMBOXX_ALLOWED_ORIGINS` to the exact Pages preview and production HTTPS origins. Set `MPESA_CHECKOUT_ENABLED=true`, `MPESA_ENVIRONMENT=sandbox`, and `MPESA_PRODUCT=paybill` only while deliberately validating sandbox checkout. For a Safaricom-approved Buy Goods sandbox setup, select `MPESA_PRODUCT=buygoods` and set `MPESA_TILL_NUMBER`.
 4. Add the Pages preview and production URLs to Supabase Auth's allowed redirect URLs. Set the production site URL to your eventual custom domain.
@@ -23,6 +24,7 @@ This project can be deployed as a static website, but it is not ready to accept 
 ## 3. Add a rights-cleared catalogue and streaming assets
 
 - Obtain written streaming rights for each film or series and territory, term, languages, devices, and subscription model you intend to offer. Obtain separate rights for each poster or artwork image.
+- Keep feature films, episodic series, short films, and trailers in their matching catalogue sections. A trailer or short must not be presented as a feature film.
 - Keep the agreements and evidence in private storage. Enter the evidence references in the owner dashboard; never upload rights documents into the public web repository.
 - Upload authorized video masters to Cloudflare Stream. Confirm signed URLs are required and encoding is complete, then sync the asset and publish the title from the owner dashboard.
 - Verify playback for an active-trial viewer, an expired viewer, and a signed-out visitor. Confirm expired and signed-out viewers cannot obtain playable media URLs.
@@ -39,6 +41,7 @@ This project can be deployed as a static website, but it is not ready to accept 
 - Publish reviewed Terms of Service, Privacy Notice, cancellation/refund policy, content complaints/takedown contact, and support contact. These must accurately identify the business/operator, how email and M-Pesa phone/payment references are used, retention, trial and renewal behavior, access expiry, and complaint handling. Do not publish generic placeholder legal text.
 - Confirm applicable Kenyan business, tax, consumer-protection, data-protection, and content-distribution obligations with qualified local advisers and Safaricom. This checklist is not legal or tax advice.
 - Test mobile and desktop layouts, installability, email links on the production domain, accessibility, slow connections, monitoring/alerts, backup/restore, and account deletion/support procedures.
+- Phone-verified free trials are deliberately deferred. The current web release allows email signup without SMS; do not advertise a free trial until an SMS provider is configured, phone verification and one-trial-per-number enforcement are deployed, and delivery is tested.
 - Connect a domain you control to Cloudflare Pages, enforce HTTPS, check the production environment values and allowed origins, and launch only after the gates above are signed off.
 
 ## 6. Desktop and phone/TV apps
@@ -46,6 +49,10 @@ This project can be deployed as a static website, but it is not ready to accept 
 - The current Electron folder is a local desktop shell, not a signed installable release. Packaging, Windows code signing, updates, and distribution still need a separate release setup.
 - The current PWA can be installed from a supported browser. Native Android/iOS/TV apps require separate packaging and device testing; they are not produced by the current web build.
 - Keep all clients as untrusted public apps. Server-side Supabase authorization, signed media access, and payment verification remain mandatory.
+
+## Pricing and category access are not live yet
+
+See [`PRODUCT_ROADMAP.md`](PRODUCT_ROADMAP.md) for the proposed default access rules. The current checkout is a single KES 50 pass and does not distinguish African, Asian, daily, or monthly plans. Do not display the KES 100 Asian price or a monthly price as purchasable until plan-aware checkout and server-side playback checks are deployed. Monthly prices remain unset until the owner chooses them.
 
 ## Launch is blocked until
 
